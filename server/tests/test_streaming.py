@@ -59,6 +59,17 @@ class TestChunkText:
         )
         assert chunk_text(chunk) == "안"
 
+    def test_content_blocks_cumulative_snapshots(self):
+        """Gemini-style chunks: each block repeats text from the start."""
+        chunk = SimpleNamespace(
+            text=None,
+            content=[
+                {"type": "text", "text": "안"},
+                {"type": "text", "text": "안녕하세요"},
+            ],
+        )
+        assert chunk_text(chunk) == "안녕하세요"
+
 
 class TestStreamAccumulator:
     def test_delta_single_run(self):
@@ -161,6 +172,30 @@ class TestTokenFromStreamEvent:
 
 class TestStreamEventPipeline:
     """End-to-end: LangGraph-style events → tokens (no duplicate chars)."""
+
+    def test_cumulative_blocks_in_single_chunk_no_double_chars(self):
+        """Reproduces UI '안안녕하세요녕하세요' when chunk has cumulative blocks."""
+        acc = StreamAccumulator()
+        chunk = SimpleNamespace(
+            text=None,
+            content=[
+                {"type": "text", "text": "안"},
+                {"type": "text", "text": "안녕하세요"},
+            ],
+        )
+        events = [
+            {"event": "on_chat_model_stream", "run_id": "r1", "data": {"chunk": SimpleNamespace(text=None, content="안")}},
+            {"event": "on_chat_model_stream", "run_id": "r1", "data": {"chunk": chunk}},
+        ]
+        tokens = []
+        for ev in events:
+            parsed = token_from_stream_event(ev)
+            if parsed:
+                run_id, piece = parsed
+                t = acc.ingest(run_id, piece)
+                if t:
+                    tokens.append(t)
+        assert "".join(tokens) == "안녕하세요"
 
     def test_duplicate_events_through_pipeline(self):
         acc = StreamAccumulator()

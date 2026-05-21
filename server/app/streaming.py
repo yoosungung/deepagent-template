@@ -31,10 +31,11 @@ def chunk_text(chunk: Any) -> str:
                     parts.append(block_text)
         if not parts:
             return ""
-        # Some providers repeat the same text block twice in one chunk
-        if len(parts) > 1 and len(set(parts)) == 1:
-            return parts[0]
-        return "".join(parts)
+        # Providers (e.g. Gemini) may send cumulative snapshots per block in one chunk
+        merged = ""
+        for part in parts:
+            merged = merge_run_text(merged, part)
+        return merged
     return ""
 
 

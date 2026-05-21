@@ -46,6 +46,20 @@ export default function ChatView() {
   const chatEndRef = useRef<HTMLDivElement>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const activeEventSourceRef = useRef<EventSource | null>(null)
+  /** Accumulates SSE tokens outside React state (avoids impure setState + double-append). */
+  const streamBufferRef = useRef('')
+
+  const replaceLastAssistantContent = (content: string) => {
+    setMessages((prev) => {
+      const lastIdx = prev.length - 1
+      if (lastIdx < 0 || prev[lastIdx].role !== 'assistant') return prev
+      if (prev[lastIdx].content === content) return prev
+      return [
+        ...prev.slice(0, lastIdx),
+        { ...prev[lastIdx], content },
+      ]
+    })
+  }
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -72,6 +86,10 @@ export default function ChatView() {
     setLoading(true)
     addLog(`[System] Sending message on thread "${threadId}"`)
 
+    activeEventSourceRef.current?.close()
+    activeEventSourceRef.current = null
+    streamBufferRef.current = ''
+
     // Prepare container for agent streaming response
     setMessages(prev => [...prev, { role: 'assistant', content: '' }])
 
@@ -86,14 +104,11 @@ export default function ChatView() {
           const data = JSON.parse(event.data)
           
           if (data.type === 'token') {
-            setMessages(prev => {
-              const updated = [...prev]
-              const lastMsg = updated[updated.length - 1]
-              if (lastMsg && lastMsg.role === 'assistant') {
-                lastMsg.content = appendTokenContent(lastMsg.content, data.content)
-              }
-              return updated
-            })
+            streamBufferRef.current = appendTokenContent(
+              streamBufferRef.current,
+              data.content,
+            )
+            replaceLastAssistantContent(streamBufferRef.current)
           } else if (data.type === 'log') {
             addLog(data.content)
           } else if (data.type === 'done') {
@@ -104,14 +119,8 @@ export default function ChatView() {
           } else if (data.type === 'error') {
             setLoading(false)
             addLog(`[Error] ${data.content}`)
-            setMessages(prev => {
-              const updated = [...prev]
-              const lastMsg = updated[updated.length - 1]
-              if (lastMsg && lastMsg.role === 'assistant') {
-                lastMsg.content = `에러가 발생했습니다: ${data.content}`
-              }
-              return updated
-            })
+            streamBufferRef.current = `에러가 발생했습니다: ${data.content}`
+            replaceLastAssistantContent(streamBufferRef.current)
             activeEventSource?.close()
             activeEventSourceRef.current = null
           }
@@ -141,6 +150,7 @@ export default function ChatView() {
   const resetChatSession = (logMessage: string) => {
     activeEventSourceRef.current?.close()
     activeEventSourceRef.current = null
+    streamBufferRef.current = ''
     setLoading(false)
     setInput('')
     setMessages(createInitialMessages())
@@ -151,6 +161,7 @@ export default function ChatView() {
   const handleClear = () => {
     activeEventSourceRef.current?.close()
     activeEventSourceRef.current = null
+    streamBufferRef.current = ''
     setLoading(false)
     setInput('')
     setMessages([

@@ -123,7 +123,7 @@ def create_agent_system():
         system_prompt=(
             "You are the Orchestrator Agent, the main entry point for the agentic system.\n"
             "Your goal is to coordinate the execution of complex tasks for the user.\n"
-            "You have access to a Postgres-backed Virtual File System (VFS) containing `/AGENTS.md`, `/skills/`, and `/memory/`.\n"
+            "You have access to a Virtual File System (VFS) containing `/AGENTS.md`, `/skills/`, and `/memory/`.\n"
             "For information gathering, delegate to the `researcher` subagent.\n"
             "For writing, formatting, or updating files, delegate to the `writer` subagent.\n"
             "Always save intermediate states or findings in the VFS so that you and the subagents share a consistent view of the workspace."

@@ -221,7 +221,10 @@ async def stream_agent(
             logger.error("SSE stream error", exc_info=True)
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
             
-    return StreamingResponse(sse_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        sse_generator(),
+        media_type="text/event-stream; charset=utf-8",
+    )
 
 # --- VFS API Endpoints ---
 
