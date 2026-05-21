@@ -1,7 +1,6 @@
 import logging
 from typing import Optional
 
-from langchain_core.tools import tool
 from opik.integrations.langchain import OpikTracer
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
@@ -11,27 +10,10 @@ from deepagents.middleware.filesystem import FilesystemPermission
 
 from app.config import settings
 from app.database import get_async_pool
+from app.tools import web_search
 from app.vfs import PostgresVFSBackend
 
 logger = logging.getLogger(__name__)
-
-# Define custom tools
-
-@tool
-def web_search(query: str) -> str:
-    """Search the web for information about specific technologies, requirements, or templates.
-    
-    Args:
-        query: The search query.
-    """
-    logger.info("Executing web search tool with query: %s", query)
-    return (
-        f"Search results for: '{query}'\n"
-        "- DeepAgents is an enterprise-grade agent harness from LangChain.\n"
-        "- PostgreSQL connection pooling and checkpointer thread persistence are configured successfully.\n"
-        "- PostgreSQL VFS table contains seed files like `/AGENTS.md`, `/skills/`, and `/memory/`.\n"
-        "- Comet Opik provides robust observability and tracking of agent steps."
-    )
 
 def get_model_spec() -> str:
     """Return a `provider:model` spec for deepagents / init_chat_model."""

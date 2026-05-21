@@ -8,11 +8,73 @@ interface VfsEntry {
   modified_at: string
 }
 
+function normalizeDirPath(path: string): string {
+  return path.endsWith('/') ? path : `${path}/`
+}
+
+function isDirectChild(entryPath: string, parentPath: string): boolean {
+  const parent = normalizeDirPath(parentPath)
+  if (!entryPath.startsWith(parent) || entryPath === parent.slice(0, -1)) {
+    return false
+  }
+  const relative = entryPath.slice(parent.length)
+  return relative.split('/').filter(Boolean).length === 1
+}
+
+function mergeEntries(
+  prev: VfsEntry[],
+  newEntries: VfsEntry[],
+  parentPath: string
+): VfsEntry[] {
+  const parent = normalizeDirPath(parentPath)
+  const kept = prev.filter((entry) => !isDirectChild(entry.path, parent))
+  const byPath = new Map(kept.map((entry) => [entry.path, entry]))
+  for (const entry of newEntries) {
+    byPath.set(entry.path, entry)
+  }
+  return Array.from(byPath.values())
+}
+
+function getParentPath(entryPath: string): string {
+  const normalized = entryPath.endsWith('/') ? entryPath.slice(0, -1) : entryPath
+  const lastSlash = normalized.lastIndexOf('/')
+  if (lastSlash <= 0) return '/'
+  return `${normalized.slice(0, lastSlash)}/`
+}
+
+function getDisplayName(entryPath: string): string {
+  return entryPath.split('/').filter(Boolean).pop() || entryPath
+}
+
+function sortSiblings(a: VfsEntry, b: VfsEntry): number {
+  if (a.is_dir && !b.is_dir) return -1
+  if (!a.is_dir && b.is_dir) return 1
+  return getDisplayName(a.path).localeCompare(getDisplayName(b.path))
+}
+
+function buildChildrenMap(entries: VfsEntry[]): Map<string, VfsEntry[]> {
+  const map = new Map<string, VfsEntry[]>()
+  for (const entry of entries) {
+    if (entry.path === '/') continue
+    const parent = getParentPath(entry.path)
+    const siblings = map.get(parent) ?? []
+    siblings.push(entry)
+    map.set(parent, siblings)
+  }
+  for (const siblings of map.values()) {
+    siblings.sort(sortSiblings)
+  }
+  return map
+}
+
 export default function AdminView() {
   const [entries, setEntries] = useState<VfsEntry[]>([])
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
-    '/': true
+    '/': true,
   })
+  const [loadedFolders, setLoadedFolders] = useState<Set<string>>(new Set(['/']))
+  const [loadingFolders, setLoadingFolders] = useState<Record<string, boolean>>({})
+  const [treeLoading, setTreeLoading] = useState(true)
   
   // Selected file states
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
@@ -31,26 +93,63 @@ export default function AdminView() {
   const [uploadPath, setUploadPath] = useState<string>('')
   
   useEffect(() => {
-    fetchVfsList()
+    void fetchVfsList('/')
   }, [])
 
-  const fetchVfsList = async () => {
+  const fetchVfsList = async (path: string = '/') => {
+    const dirPath = normalizeDirPath(path)
+    setLoadingFolders((prev) => ({ ...prev, [dirPath]: true }))
     try {
-      const res = await fetch('/api/vfs/list?path=/')
+      const res = await fetch(`/api/vfs/list?path=${encodeURIComponent(dirPath)}`)
       if (res.ok) {
         const data = await res.json()
-        setEntries(data.entries || [])
+        const newEntries: VfsEntry[] = data.entries || []
+        setEntries((prev) => mergeEntries(prev, newEntries, dirPath))
+        setLoadedFolders((prev) => new Set(prev).add(dirPath))
       }
     } catch (err) {
       console.error('Failed to fetch VFS items', err)
+    } finally {
+      setLoadingFolders((prev) => ({ ...prev, [dirPath]: false }))
+      if (dirPath === '/') {
+        setTreeLoading(false)
+      }
     }
   }
 
-  const toggleFolder = (path: string) => {
-    setExpandedFolders(prev => ({
-      ...prev,
-      [path]: !prev[path]
-    }))
+  const refreshTree = async () => {
+    setTreeLoading(true)
+    setLoadedFolders(new Set(['/']))
+    setExpandedFolders({ '/': true })
+    setEntries([])
+    await fetchVfsList('/')
+  }
+
+  const refreshParentOf = async (itemPath: string) => {
+    const parents = parentDirPaths(itemPath)
+    const parent = parents.length > 0 ? parents[parents.length - 1] : '/'
+    const dirPath = normalizeDirPath(parent)
+    setLoadedFolders((prev) => {
+      const next = new Set(prev)
+      next.delete(dirPath)
+      return next
+    })
+    await fetchVfsList(dirPath)
+  }
+
+  const toggleFolder = async (path: string) => {
+    const dirPath = normalizeDirPath(path)
+    const isExpanded = expandedFolders[dirPath] !== false
+
+    if (isExpanded) {
+      setExpandedFolders((prev) => ({ ...prev, [dirPath]: false }))
+      return
+    }
+
+    setExpandedFolders((prev) => ({ ...prev, [dirPath]: true }))
+    if (!loadedFolders.has(dirPath)) {
+      await fetchVfsList(dirPath)
+    }
   }
 
   /** Parent directory paths that must be expanded for `path` to show in the tree. */
@@ -115,7 +214,7 @@ export default function AdminView() {
       alert('네트워크 오류가 발생했습니다.')
     } finally {
       setSaving(false)
-      fetchVfsList()
+      await refreshParentOf(selectedFile)
     }
   }
 
@@ -133,7 +232,7 @@ export default function AdminView() {
           setSelectedFile(null)
           setFileContent('')
         }
-        fetchVfsList()
+        await refreshParentOf(path)
       } else {
         alert('삭제에 실패했습니다.')
       }
@@ -169,7 +268,7 @@ export default function AdminView() {
         addConsoleLog(`[VFS] Created ${isNewFolder ? 'directory' : 'file'}: ${formattedPath}`)
         setNewPath('')
         setShowCreateModal(false)
-        fetchVfsList()
+        await refreshParentOf(formattedPath)
         if (!isNewFolder) {
           handleSelectFile(formattedPath)
         }
@@ -204,7 +303,7 @@ export default function AdminView() {
         addConsoleLog(`[VFS] Uploaded file successfully: ${formattedPath}`)
         setUploadFile(null)
         setUploadPath('')
-        fetchVfsList()
+        await refreshParentOf(formattedPath)
         handleSelectFile(formattedPath)
       } else {
         alert('업로드에 실패했습니다.')
@@ -219,89 +318,103 @@ export default function AdminView() {
     window.open(`/api/vfs/download?path=${encodeURIComponent(path)}`)
   }
 
-  // File tree grouping render
-  const renderTree = () => {
-    // Process flat path entries into tree structure or render directly sorted list
-    // Since VFS contains full paths like /skills/research_assistant/SKILL.md, we sort them so directories appear first.
-    
-    // Sort directories before files, then sort alphabetically
-    const sorted = [...entries].sort((a, b) => {
-      if (a.is_dir && !b.is_dir) return -1
-      if (!a.is_dir && b.is_dir) return 1
-      return a.path.localeCompare(b.path)
-    })
+  const renderEntryRow = (entry: VfsEntry, depth: number) => {
+    const name = getDisplayName(entry.path)
+    const paddingLeft = `${depth * 12}px`
+    const dirPath = entry.is_dir ? normalizeDirPath(entry.path) : entry.path
+    const isExpanded = entry.is_dir && expandedFolders[dirPath] !== false
+    const isFolderLoading = entry.is_dir && loadingFolders[dirPath]
 
     return (
-      <div className="space-y-1">
-        {sorted.map(entry => {
-          if (!isEntryVisible(entry)) return null
+      <div
+        key={entry.path}
+        onClick={() => {
+          if (entry.is_dir) {
+            void toggleFolder(entry.path)
+          } else {
+            handleSelectFile(entry.path)
+          }
+        }}
+        className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer group transition-all ${
+          selectedFile === entry.path
+            ? 'bg-cyan-400/10 text-cyan-400 font-semibold border-l-2 border-cyan-400'
+            : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+        }`}
+        style={{ paddingLeft }}
+      >
+        <div className="flex items-center gap-2 truncate">
+          {entry.is_dir ? (
+            <>
+              {isFolderLoading ? (
+                <ChevronRight className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0 animate-spin" />
+              ) : isExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
+              )}
+              <Folder className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            </>
+          ) : (
+            <>
+              <span className="w-3.5 h-3.5 flex-shrink-0" />
+              <FileText className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+            </>
+          )}
+          <span className="truncate" title={entry.path}>
+            {name}
+            {entry.is_dir ? '/' : ''}
+          </span>
+        </div>
 
-          const depth = (entry.path.match(/\//g) || []).length - (entry.path.endsWith('/') ? 1 : 0)
-          const name = entry.path.split('/').filter(Boolean).pop() || entry.path
-
-          if (entry.path === '/') return null
-
-          const paddingLeft = `${depth * 12}px`
-
-          return (
-            <div
-              key={entry.path}
-              onClick={() => {
-                if (entry.is_dir) {
-                  toggleFolder(entry.path)
-                } else {
-                  handleSelectFile(entry.path)
-                }
-              }}
-              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer group transition-all ${
-                selectedFile === entry.path
-                  ? 'bg-cyan-400/10 text-cyan-400 font-semibold border-l-2 border-cyan-400'
-                  : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-              }`}
-              style={{ paddingLeft }}
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {!entry.is_dir && (
+            <button
+              onClick={(e) => handleDownloadFile(entry.path, e)}
+              className="p-1 hover:text-cyan-400 rounded hover:bg-white/10"
+              title="Download file"
             >
-              <div className="flex items-center gap-2 truncate">
-                {entry.is_dir ? (
-                  <>
-                    {expandedFolders[entry.path] ? (
-                      <ChevronDown className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
-                    ) : (
-                      <ChevronRight className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
-                    )}
-                    <Folder className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                  </>
-                ) : (
-                  <>
-                    <span className="w-3.5 h-3.5 flex-shrink-0" />
-                    <FileText className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                  </>
-                )}
-                <span className="truncate" title={entry.path}>{name}{entry.is_dir ? '/' : ''}</span>
-              </div>
-              
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                {!entry.is_dir && (
-                  <button
-                    onClick={(e) => handleDownloadFile(entry.path, e)}
-                    className="p-1 hover:text-cyan-400 rounded hover:bg-white/10"
-                    title="Download file"
-                  >
-                    <Download className="w-3 h-3" />
-                  </button>
-                )}
-                <button
-                  onClick={(e) => handleDeleteFile(entry.path, e)}
-                  className="p-1 hover:text-rose-400 rounded hover:bg-white/10"
-                  title="Delete entry"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-          )
-        })}
+              <Download className="w-3 h-3" />
+            </button>
+          )}
+          <button
+            onClick={(e) => handleDeleteFile(entry.path, e)}
+            className="p-1 hover:text-rose-400 rounded hover:bg-white/10"
+            title="Delete entry"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
       </div>
     )
+  }
+
+  const renderTreeNodes = (
+    childrenMap: Map<string, VfsEntry[]>,
+    parentPath: string,
+    depth: number
+  ): React.ReactNode[] => {
+    const children = childrenMap.get(parentPath) ?? []
+    const nodes: React.ReactNode[] = []
+
+    for (const entry of children) {
+      if (!isEntryVisible(entry)) continue
+
+      nodes.push(renderEntryRow(entry, depth))
+
+      if (entry.is_dir) {
+        const dirPath = normalizeDirPath(entry.path)
+        if (expandedFolders[dirPath] !== false) {
+          nodes.push(...renderTreeNodes(childrenMap, dirPath, depth + 1))
+        }
+      }
+    }
+
+    return nodes
+  }
+
+  const renderTree = () => {
+    const childrenMap = buildChildrenMap(entries)
+    return <div className="space-y-1">{renderTreeNodes(childrenMap, '/', 0)}</div>
   }
 
   const [consoleLogs, setConsoleLogs] = useState<string[]>([
@@ -332,7 +445,7 @@ export default function AdminView() {
               <Plus className="w-4 h-4" />
             </button>
             <button
-              onClick={fetchVfsList}
+              onClick={() => void refreshTree()}
               className="p-1.5 text-zinc-400 hover:text-cyan-400 hover:bg-white/5 rounded transition-all"
               title="Refresh VFS tree"
             >
@@ -343,8 +456,10 @@ export default function AdminView() {
 
         {/* Tree Container */}
         <div className="flex-1 p-4 overflow-y-auto scrollbar-gutter-stable overscroll-contain">
-          {entries.length === 0 ? (
+          {treeLoading ? (
             <p className="text-xs text-zinc-500 text-center p-4">Loading VFS database records...</p>
+          ) : entries.length === 0 ? (
+            <p className="text-xs text-zinc-500 text-center p-4">VFS가 비어 있습니다.</p>
           ) : (
             renderTree()
           )}

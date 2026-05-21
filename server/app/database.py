@@ -99,7 +99,7 @@ def init_db():
                 
                 skill_md = """---
 name: Web Search
-description: Search the web for information using Google or Naver.
+description: Search the web for information using Naver.
 allowed_tools: [web_search]
 ---
 # Research Skill

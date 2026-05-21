@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     OPIK_API_KEY: Optional[str] = None
     OPIK_URL_OVERRIDE: Optional[str] = None
 
+    NAVER_CLIENT_ID: Optional[str] = None
+    NAVER_CLIENT_SECRET: Optional[str] = None
+
     PORT: int = 8000
     HOST: str = "0.0.0.0"
 
