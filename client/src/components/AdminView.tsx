@@ -139,7 +139,7 @@ export default function AdminView() {
 
   const toggleFolder = async (path: string) => {
     const dirPath = normalizeDirPath(path)
-    const isExpanded = expandedFolders[dirPath] !== false
+    const isExpanded = expandedFolders[dirPath] === true
 
     if (isExpanded) {
       setExpandedFolders((prev) => ({ ...prev, [dirPath]: false }))
@@ -166,7 +166,7 @@ export default function AdminView() {
   const isEntryVisible = (entry: VfsEntry): boolean => {
     if (entry.path === '/') return false
     return parentDirPaths(entry.path).every(
-      (parent) => expandedFolders[parent] !== false
+      (parent) => expandedFolders[parent] === true
     )
   }
 
@@ -322,7 +322,7 @@ export default function AdminView() {
     const name = getDisplayName(entry.path)
     const paddingLeft = `${depth * 12}px`
     const dirPath = entry.is_dir ? normalizeDirPath(entry.path) : entry.path
-    const isExpanded = entry.is_dir && expandedFolders[dirPath] !== false
+    const isExpanded = entry.is_dir && expandedFolders[dirPath] === true
     const isFolderLoading = entry.is_dir && loadingFolders[dirPath]
 
     return (
@@ -403,7 +403,7 @@ export default function AdminView() {
 
       if (entry.is_dir) {
         const dirPath = normalizeDirPath(entry.path)
-        if (expandedFolders[dirPath] !== false) {
+        if (expandedFolders[dirPath] === true) {
           nodes.push(...renderTreeNodes(childrenMap, dirPath, depth + 1))
         }
       }

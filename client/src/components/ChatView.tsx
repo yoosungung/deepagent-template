@@ -18,6 +18,10 @@ function createInitialMessages(): Message[] {
   return [{ role: 'assistant', content: INITIAL_ASSISTANT_MESSAGE }]
 }
 
+function createThreadId(): string {
+  return Math.random().toString(36).slice(2, 8)
+}
+
 /** SSE token payloads may be a string or structured content blocks from the LLM. */
 function appendTokenContent(current: string, token: unknown): string {
   if (typeof token === 'string') return current + token
@@ -37,7 +41,7 @@ function appendTokenContent(current: string, token: unknown): string {
 }
 
 export default function ChatView() {
-  const [threadId, setThreadId] = useState<string>('si-session-01')
+  const [threadId, setThreadId] = useState<string>(createThreadId)
   const [messages, setMessages] = useState<Message[]>(createInitialMessages)
   const [input, setInput] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
@@ -158,23 +162,8 @@ export default function ChatView() {
     addLog(logMessage)
   }
 
-  const handleClear = () => {
-    activeEventSourceRef.current?.close()
-    activeEventSourceRef.current = null
-    streamBufferRef.current = ''
-    setLoading(false)
-    setInput('')
-    setMessages([
-      {
-        role: 'assistant',
-        content: '대화 기록이 초기화되었습니다. 진행할 작업을 입력해주세요.'
-      }
-    ])
-    setLogs([{ timestamp: new Date().toLocaleTimeString(), content: '[System] Conversation history cleared locally.' }])
-  }
-
   const handleGenerateThreadId = () => {
-    const newId = `si-session-${Math.random().toString(36).slice(2, 8)}`
+    const newId = createThreadId()
     setThreadId(newId)
     resetChatSession(`[System] New thread "${newId}" — conversation reset.`)
   }
@@ -264,27 +253,17 @@ export default function ChatView() {
                 className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-sm text-white placeholder-zinc-500 py-2.5"
                 disabled={loading}
               />
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 transition-all"
-                  title="Clear conversation"
-                >
-                  Clear
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading || !input.trim()}
-                  className={`p-2.5 rounded-lg transition-all ${
-                    loading || !input.trim()
-                      ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
-                      : 'bg-cyan-400 text-slate-950 hover:bg-cyan-300 active:scale-95 shadow-lg shadow-cyan-400/10'
-                  }`}
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={loading || !input.trim()}
+                className={`p-2.5 rounded-lg transition-all ${
+                  loading || !input.trim()
+                    ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
+                    : 'bg-cyan-400 text-slate-950 hover:bg-cyan-300 active:scale-95 shadow-lg shadow-cyan-400/10'
+                }`}
+              >
+                <Send className="w-4 h-4" />
+              </button>
             </div>
           </form>
         </div>
