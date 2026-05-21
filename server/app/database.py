@@ -1,9 +1,12 @@
-import psycopg
-from psycopg.rows import dict_row
-from psycopg_pool import ConnectionPool, AsyncConnectionPool
-from langgraph.checkpoint.postgres import PostgresSaver
-from app.config import settings
 import logging
+from pathlib import Path
+
+import psycopg
+from langgraph.checkpoint.postgres import PostgresSaver
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool, ConnectionPool
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -64,13 +67,9 @@ def init_db():
             count = cur.fetchone()[0]
             if count == 0:
                 logger.info("Seeding initial VFS files...")
-                # Seed root AGENTS.md
-                import os
-                agents_md_path = "../AGENTS.md"
-                agents_md_content = ""
-                if os.path.exists(agents_md_path):
-                    with open(agents_md_path, "r", encoding="utf-8") as f:
-                        agents_md_content = f.read()
+                agents_md_path = Path(__file__).resolve().parent.parent.parent / "AGENTS.md"
+                if agents_md_path.is_file():
+                    agents_md_content = agents_md_path.read_text(encoding="utf-8")
                 else:
                     agents_md_content = "# AGENTS.md\nWorkspace seeded successfully."
                 
