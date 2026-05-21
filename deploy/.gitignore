@@ -1,0 +1,10 @@
+# Local kube overrides & secrets (base manifests stay tracked)
+*.local.yaml
+*.local.yml
+secrets/
+kubeconfig
+kubeconfig.*
+
+# Env files used during deploy scripts
+.env
+.env.*

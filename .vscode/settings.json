@@ -1,0 +1,13 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/server/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "python.envFile": "${workspaceFolder}/server/.env",
+  "python.analysis.extraPaths": ["${workspaceFolder}/server"],
+  "[python]": {
+    "editor.formatOnSave": false
+  },
+  "debug.javascript.autoAttachFilter": "onlyWithFlag",
+  "cursorpyright.analysis.extraPaths": [
+    "${workspaceFolder}/server"
+  ]
+}

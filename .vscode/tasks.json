@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "postgresql: port-forward",
+      "type": "shell",
+      "command": "if lsof -iTCP:5432 -sTCP:LISTEN -n -P >/dev/null 2>&1; then echo 'postgresql port-forward: port 5432 already in use, skipping'; exit 0; fi; exec kubectl port-forward services/postgresql-rw 5432:5432 -n t2sql",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "kubectl",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "(Forwarding from|already in use, skipping)"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "db"
+      }
+    }
+  ]
+}

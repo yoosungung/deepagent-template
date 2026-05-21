@@ -1,0 +1,27 @@
+[project]
+name = "agent-server"
+version = "0.1.0"
+description = "FastAPI + DeepAgents Scaffolding Backend"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+    "deepagents>=0.5.0",
+    "langgraph>=0.1.0",
+    "langgraph-checkpoint-postgres>=2.0.0",
+    "asyncpg>=0.29.0",
+    "psycopg[binary,pool]>=3.1.18",
+    "opik>=1.0.0",
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.2.0",
+    "python-dotenv>=1.0.1",
+    "python-multipart>=0.0.9",
+    "langchain-openai>=0.1.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.5",
+]
